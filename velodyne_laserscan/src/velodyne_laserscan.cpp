@@ -63,6 +63,17 @@ VelodyneLaserScan::VelodyneLaserScan(const rclcpp::NodeOptions & options)
   ring_desc.integer_range.push_back(ring_range);
   ring_ = declare_parameter("ring", -1, ring_desc);
 
+  // 2つ目のリングパラメータの追加
+  rcl_interfaces::msg::ParameterDescriptor ring2_desc;
+  ring2_desc.name = "ring2";
+  ring2_desc.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+  ring2_desc.description = "Second Ring for 2.5D scan";
+  rcl_interfaces::msg::IntegerRange ring2_range;
+  ring2_range.from_value = -1;
+  ring2_range.to_value = 31;
+  ring2_desc.integer_range.push_back(ring2_range);
+  ring_2_ = declare_parameter("ring2", -1, ring2_desc);
+
   rcl_interfaces::msg::ParameterDescriptor resolution_desc;
   resolution_desc.name = "resolution";
   resolution_desc.type = rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE;
@@ -77,6 +88,7 @@ VelodyneLaserScan::VelodyneLaserScan(const rclcpp::NodeOptions & options)
     "velodyne_points", rclcpp::QoS(10),
     std::bind(&VelodyneLaserScan::recvCallback, this, std::placeholders::_1));
   pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan", 10);
+  pub_2d5_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan2", 10);  // 2.5D用のパブリッシャー初期化
 }
 
 void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -115,8 +127,9 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
     }
   }
 
-  // Select ring to use
+  // Select rings to use
   uint16_t ring;
+  uint16_t ring2;
 
   if ((ring_ < 0) || (ring_ >= ring_count_)) {
     // Default to ring closest to being level for each known sensor
@@ -129,6 +142,19 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
     }
   } else {
     ring = ring_;
+  }
+
+  if ((ring_2_ < 0) || (ring_2_ >= ring_count_)) {
+    // Default to a different ring for 2.5D
+    if (ring_count_ > 32) {
+      ring2 = 45;  // HDL-64E
+    } else if (ring_count_ > 16) {
+      ring2 = 15;  // HDL-32E
+    } else {
+      ring2 = 5;  // VLP-16
+    }
+  } else {
+    ring2 = ring_2_;
   }
 
   // Load structure of PointCloud2
@@ -158,7 +184,7 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
 
   (void)offset_z;
 
-  // Construct LaserScan message
+  // 通常のLaserScanの処理
   if ((offset_x >= 0) && (offset_y >= 0) && (offset_r >= 0)) {
     const float kResolution = std::abs(resolution_);
     const size_t kSize = std::round(2.0 * M_PI / kResolution);
@@ -184,11 +210,6 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
       const size_t I = offset_i / 4;
       const size_t R = offset_r / 4;
       for (sensor_msgs::PointCloud2ConstIterator<float> it(*msg, "x"); it != it.end(); ++it) {
-        // Field "ring" is of UINT16 type, 2 bytes long. But this loop's iterator assumes FLOAT32
-        // type fields, 4 bytes long. Thus, de-referencing it (even) at the right offset will
-        // only yield "ring" field bytes, plus 2 bytes right after it, interpreted as a float
-        // value. We can, however, re-interpret that float value binary representation as that
-        // of an unsigned integer, 16 bit long.
         const uint16_t r = *(reinterpret_cast<const uint16_t *>(&it[R]));
 
         if (r == ring) {
@@ -256,6 +277,83 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
     RCLCPP_ERROR(
       this->get_logger(),
       "PointCloud2 missing one or more required fields! (x,y,ring)");
+    return;  // 必要なフィールドがない場合は早期リターン
+  }
+
+  // 2.5D LaserScan (scan2) の処理
+  if ((offset_x >= 0) && (offset_y >= 0) && (offset_r >= 0)) {
+    const float kResolution = std::abs(resolution_);
+    const size_t kSize = std::round(2.0 * M_PI / kResolution);
+    auto scan2 = std::make_unique<sensor_msgs::msg::LaserScan>();
+    scan2->header = msg->header;
+    scan2->angle_increment = kResolution;
+    scan2->angle_min = -M_PI;
+    scan2->angle_max = M_PI;
+    scan2->range_min = 0.0;
+    scan2->range_max = 200.0;
+    scan2->time_increment = 0.0;
+    scan2->ranges.resize(kSize, INFINITY);
+    
+    if (offset_i >= 0) {
+      scan2->intensities.resize(kSize);
+    }
+
+    // リング1とリング2のデータを格納する配列
+    std::vector<float> ring1_ranges(kSize, INFINITY);
+    std::vector<float> ring2_ranges(kSize, INFINITY);
+    std::vector<float> ring1_intensities;
+    std::vector<float> ring2_intensities;
+    
+    if (offset_i >= 0) {
+      ring1_intensities.resize(kSize, 0.0);
+      ring2_intensities.resize(kSize, 0.0);
+    }
+
+    // リング1のデータを抽出
+    sensor_msgs::PointCloud2ConstIterator<uint16_t> iter_r(*msg, "ring");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_i(*msg, "intensity");
+
+    for (; iter_r != iter_r.end(); ++iter_x, ++iter_y, ++iter_r, ++iter_i) {
+      const uint16_t r = *iter_r;  // ring
+      const float x = *iter_x;     // x
+      const float y = *iter_y;     // y
+      const int bin = (::atan2f(y, x) + static_cast<float>(M_PI)) / kResolution;
+
+      if (bin >= 0 && bin < static_cast<int>(kSize)) {
+        float distance = ::sqrtf(x * x + y * y);
+
+        if (r == ring) {
+          ring1_ranges[bin] = distance;
+          if (offset_i >= 0) {
+            ring1_intensities[bin] = *iter_i;
+          }
+        } else if (r == ring2) {
+          ring2_ranges[bin] = distance;
+          if (offset_i >= 0) {
+            ring2_intensities[bin] = *iter_i;
+          }
+        }
+      }
+    }
+
+    // 2つのリングのデータを合成（近い方の点を採用）
+    for (size_t i = 0; i < kSize; ++i) {
+      if (ring1_ranges[i] <= ring2_ranges[i]) {
+        scan2->ranges[i] = ring1_ranges[i];
+        if (offset_i >= 0) {
+          scan2->intensities[i] = ring1_intensities[i];
+        }
+      } else {
+        scan2->ranges[i] = ring2_ranges[i];
+        if (offset_i >= 0) {
+          scan2->intensities[i] = ring2_intensities[i];
+        }
+      }
+    }
+
+    pub_2d5_->publish(std::move(scan2));
   }
 }
 

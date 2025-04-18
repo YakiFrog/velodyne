@@ -56,9 +56,11 @@ private:
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_;
   rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_;
+  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_2d5_;  // 2.5D用の新しいパブリッシャー
 
   uint16_t ring_count_{0};
   int ring_;
+  int ring_2_;  // 2.5D用の2つ目のリング
   double resolution_;
 };
 
