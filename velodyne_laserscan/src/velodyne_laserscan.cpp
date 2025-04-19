@@ -338,17 +338,27 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
       }
     }
 
-    // 2つのリングのデータを合成（近い方の点を採用）
+    // 2つのリングのデータを合成（近い方の点を採用、ただしring2は3mまでの範囲に制限）
     for (size_t i = 0; i < kSize; ++i) {
-      if (ring1_ranges[i] <= ring2_ranges[i]) {
-        scan2->ranges[i] = ring1_ranges[i];
-        if (offset_i >= 0) {
-          scan2->intensities[i] = ring1_intensities[i];
+      scan2->ranges[i] = ring1_ranges[i];
+      
+      // ring2の値が3m以内の場合のみ考慮する
+      if (ring2_ranges[i] <= 4.0) {
+        // ring1_ranges[i]がring2_ranges[i]より小さい場合は、ring1の値を使用
+        if (ring1_ranges[i] <= ring2_ranges[i]) {
+          if (offset_i >= 0) {
+            scan2->intensities[i] = ring1_intensities[i];
+          }
+        } else {
+          scan2->ranges[i] = ring2_ranges[i];
+          if (offset_i >= 0) {
+            scan2->intensities[i] = ring2_intensities[i];
+          }
         }
       } else {
-        scan2->ranges[i] = ring2_ranges[i];
+        // ring2が3mより遠い場合はring1のみを使用
         if (offset_i >= 0) {
-          scan2->intensities[i] = ring2_intensities[i];
+          scan2->intensities[i] = ring1_intensities[i];
         }
       }
     }
