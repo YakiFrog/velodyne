@@ -62,6 +62,12 @@ private:
   int ring_;
   int ring_2_;  // 2.5D用の2つ目のリング
   double resolution_;
+
+  // 以下メンバ変数を追加
+  bool use_multi_ring_;
+  std::vector<int64_t> ring_ids_;
+  std::vector<double> ring_max_distances_;
+  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_multi_ring_;
 };
 
 }  // namespace velodyne_laserscan
