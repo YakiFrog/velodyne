@@ -10,9 +10,8 @@
 // * Redistributions of source code must retain the above copyright
 //   notice, this list of conditions and the following disclaimer.
 // * Redistributions in binary form must reproduce the above
-//   copyright notice, this list of conditions and the following
-//   disclaimer in the documentation and/or other materials provided
-//   with the distribution.
+//   copyright notice, this list of conditions and/or other materials
+//   provided with the distribution.
 // * Neither the name of {copyright_holder} nor the names of its
 //   contributors may be used to endorse or promote products derived
 //   from this software without specific prior written permission.
@@ -56,7 +55,7 @@ private:
 
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_;
   rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_;
-  rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_2d5_;  // 2.5D用の新しいパブリッシャー
+  // rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub_2d5_;  // 2.5D用の新しいパブリッシャー
 
   uint16_t ring_count_{0};
   int ring_;

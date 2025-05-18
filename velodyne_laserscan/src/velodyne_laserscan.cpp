@@ -105,7 +105,7 @@ VelodyneLaserScan::VelodyneLaserScan(const rclcpp::NodeOptions & options)
     "velodyne_points", rclcpp::QoS(10),
     std::bind(&VelodyneLaserScan::recvCallback, this, std::placeholders::_1));
   pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan", 10);
-  pub_2d5_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan2", 10);  // 2.5D用のパブリッシャー初期化
+  // pub_2d5_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan2", 10);  // 2.5D用のパブリッシャー初期化
   pub_multi_ring_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan3", 10);  // 複数リング2.5D用のパブリッシャー初期化
 }
 
@@ -298,7 +298,7 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
     return;  // 必要なフィールドがない場合は早期リターン
   }
 
-  // 2.5D LaserScan (scan2) の処理
+  /* 2.5D LaserScan (scan2) の処理
   if ((offset_x >= 0) && (offset_y >= 0) && (offset_r >= 0)) {
     const float kResolution = std::abs(resolution_);
     const size_t kSize = std::round(2.0 * M_PI / kResolution);
@@ -383,6 +383,7 @@ void VelodyneLaserScan::recvCallback(const sensor_msgs::msg::PointCloud2::Shared
 
     pub_2d5_->publish(std::move(scan2));
   }
+  */
 
   // 複数リングを用いた拡張2.5DスキャンのためのLaserScan (scan3) の処理
   if (use_multi_ring_ && (offset_x >= 0) && (offset_y >= 0) && (offset_r >= 0)) {
