@@ -98,7 +98,15 @@ VelodyneLaserScan::VelodyneLaserScan(const rclcpp::NodeOptions & options)
   ring_ids_ = declare_parameter("ring_ids", default_rings);
 
   // 各リングの最大距離パラメータ（8番目のリングは100mまで見えるように設定）
-  std::vector<double> default_max_distances = {2.0, 2.0, 2.0, 2.0, 2.0, 4.0, 100.0};
+  // 各リングの最大距離（地面に当たらない範囲）
+  // 1: 1.25m
+  // 2: 1.50m
+  // 3: 1.75m
+  // 4: 2.00m
+  // 5: 2.50m
+  // 6: 3.50m
+  // 7: 5.25m
+  std::vector<double> default_max_distances = {1.25, 1.50, 1.75, 2.00, 2.50, 3.50, 100.0};
   ring_max_distances_ = declare_parameter("ring_max_distances", default_max_distances);
 
   sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
